@@ -20,7 +20,7 @@ const char* mqtt_server = "nodered.local";
 
 const int trigPin = 2;
 const int echoPin = 5;
-const int tempPin = 34;
+const int tempPin = 35;
 const float radius=0.364;
 const float maxHeight=180;
 const float airgap=10.0; //space between sensor and max water level
@@ -131,11 +131,14 @@ void loop() {
     lastMsg = now;
     
     // Temperature in Celsius
-    float voltage = (analogRead(34)/4096.0)*3340.0; 
+    float voltage = (analogRead(tempPin)/4096.0)*3340.0; 
+    //float voltage = (analogRead(tempPin)/4096.0)*5030.0;
     temperature=(voltage/10.0)-273.3;  
     // Convert the value to a char array
     char tempString[8];
     dtostrf(temperature, 1, 2, tempString);
+    Serial.print("Voltage: ");
+    Serial.println(voltage);
     Serial.print("Temperature: ");
     Serial.println(tempString);
     client.publish("fisherst/temperature", tempString);
@@ -165,7 +168,9 @@ void loop() {
     volume=((maxHeight-distance)/100) * radius * radius * PI * numberTanks*1000;
     dtostrf(volume, 1, 2, volumeString);
     client.publish("fisherst/waterlevel", volumeString);
-
+    Serial.print("Volume: ");
+    Serial.println(volumeString);
+    
     float t = dht.readTemperature();
     float h = dht.readHumidity();
 
