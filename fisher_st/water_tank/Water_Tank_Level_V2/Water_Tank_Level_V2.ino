@@ -17,6 +17,7 @@ const char* mqtt_server = "nodered.local";
 const int trigPin = 2;
 const int echoPin = 5;
 const int tempPin = 35;
+const int battVPin=36;
 const float radius=0.364;
 const float maxHeight=180;
 const float airgap=10.0; //space between sensor and max water level
@@ -33,6 +34,7 @@ float humidity = 0;
 long duration;
 int distance;
 float volume;
+float battVoltage;
 
 DHT dht(DHTPIN, DHTTYPE);
 void setup() 
@@ -45,6 +47,7 @@ void setup()
   dht.begin();
   analogReadResolution(12);
   pinMode(tempPin, INPUT);
+  pinMode(battVPin, INPUT);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
@@ -147,11 +150,20 @@ void loop() {
     // Convert the value to a char array
     char tempString[8];
     dtostrf(temperature, 1, 2, tempString);
-    Serial.print("Voltage: ");
+    Serial.print("Temp Sensor Voltage: ");
     Serial.println(voltage);
     Serial.print("Temperature: ");
     Serial.println(tempString);
     client.publish("fisherst-dev/temperature", tempString);
+    //Read battery voltage
+    float battVoltage = (analogRead(battVPin)/4096.0)*3340.0;
+    battVoltage = (battVoltage /1000)*2;
+    char battVoltString[8];
+    dtostrf(battVoltage, 1, 2, battVoltString);
+    Serial.print("Battery Voltage: ");
+    Serial.println(battVoltString);
+    client.publish("fisherst-dev/batteryvolts", battVoltString);
+    
 
     // Read ultrasonic
     // Clears the trigPin
