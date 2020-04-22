@@ -16,10 +16,17 @@ const char* deviceName = "fisherst-dev";
 // MQTT Broker IP address:
 const char* mqtt_server = "nodered.local";
 
+// Settings for ultrasonics
 const int trigPin = 2;
 const int echoPin = 5;
+
+// Settings for temperature sensor
 const int tempPin = 35;
+
+//Settings for battery monitor
 const int battVPin=39;
+
+//Settings for water tank
 const float radius=0.364;
 const float maxHeight=180;
 const float airgap=10.0; //space between sensor and max water level
@@ -27,10 +34,10 @@ const float numberTanks=3.0;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+
 long lastMsg = 0;
 char msg[50];
 int value = 0;
-
 float temperature = 0;
 float humidity = 0;
 long duration;
@@ -39,18 +46,21 @@ float volume;
 float battVoltage;
 
 DHT dht(DHTPIN, DHTTYPE);
+
 void setup() 
 {
   Serial.begin(115200);
-  
+  //Set deep sleep for wakeup after 10 minutes  
   esp_sleep_enable_timer_wakeup(600*1000000);
+  
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
   pinMode(echoPin, INPUT); // Sets the echoPin as an Input/pinMode(tempPin, INPUT);
+  pinMode(tempPin, INPUT);
   dht.begin();
   analogReadResolution(12);
   adc1_config_width(ADC_WIDTH_12Bit);
   adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_11db);
-  pinMode(tempPin, INPUT);
+
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
@@ -62,14 +72,11 @@ void setup_wifi() {
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
-
   WiFi.begin(ssid, password);
-
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
@@ -87,14 +94,11 @@ void callback(char* topic, byte* message, unsigned int length) {
     messageTemp += (char)message[i];
   }
   Serial.println();
-
-  // Feel free to add more if statements to control more GPIOs with MQTT
-
-  // If a message is received on the topic fisherst-dev/output, you check if the message is either "on" or "off". 
-  // Changes the output state according to the message
-
+  //Process received messages
   if(String(topic) == "fisherst-dev/sleep")
   {
+    //We only want to go to deep sleep once we have been awake for a minute or if we are waking from a previous sleep
+    //this is so that if we later add OTA updates there is a chance to get the update happening
     if ((millis() >= 60000) || (esp_sleep_get_wakeup_cause()==3))
     {
       Serial.println("Sleepy time");
@@ -138,6 +142,7 @@ void loop() {
   long now = millis();
   if ((now - lastMsg) >= 5000) {
     lastMsg = now;
+    
     //Send IP Address to let broker know we are awake
     String tempIPAddress=WiFi.localIP().toString();
     char deviceIPAddressString[20];
@@ -148,8 +153,8 @@ void loop() {
     strcat(tempName, "/");
     strcat (tempName,"deviceipaddress");
     client.publish(tempName, deviceIPAddressString);
-    Serial.print ("Message sent to: ");
-    Serial.println (tempName);
+    //Serial.print ("Message sent to: ");
+    //Serial.println (tempName);
     
     // Temperature in Celsius
     float voltage = (analogRead(tempPin)/4096.0)*3295.0; 
