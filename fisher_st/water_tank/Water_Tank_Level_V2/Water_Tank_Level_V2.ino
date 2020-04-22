@@ -2,14 +2,16 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include "DHT.h"
-//#include <Wire.h>
-//#include <Adafruit_BME280.h>
-//#include <Adafruit_Sensor.h>
+#include <driver/adc.h>
+
+
 #define DHTPIN 4
 #define DHTTYPE DHT11
+
 // Replace the next variables with your SSID/Password combination
 const char* ssid = "WhereWillYouSpendEternity";
 const char* password = "vxHtbppr6a+_4pv+Zcjjk5-m";
+const char* deviceName = "fisherst-dev";
 
 // MQTT Broker IP address:
 const char* mqtt_server = "nodered.local";
@@ -17,7 +19,7 @@ const char* mqtt_server = "nodered.local";
 const int trigPin = 2;
 const int echoPin = 5;
 const int tempPin = 35;
-const int battVPin=36;
+const int battVPin=39;
 const float radius=0.364;
 const float maxHeight=180;
 const float airgap=10.0; //space between sensor and max water level
@@ -46,8 +48,9 @@ void setup()
   pinMode(echoPin, INPUT); // Sets the echoPin as an Input/pinMode(tempPin, INPUT);
   dht.begin();
   analogReadResolution(12);
+  adc1_config_width(ADC_WIDTH_12Bit);
+  adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_11db);
   pinMode(tempPin, INPUT);
-  pinMode(battVPin, INPUT);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
@@ -114,8 +117,6 @@ void reconnect() {
     if (client.connect("ESP8266Client")) {
       Serial.println("connected");
       // Subscribe
-      //client.subscribe("fisherst-dev/output");
-      //client.subscribe("fisherst-dev/level");
       client.subscribe("fisherst-dev/sleep");
     } else 
     {
@@ -142,10 +143,16 @@ void loop() {
     char deviceIPAddressString[20];
     tempIPAddress.toCharArray(deviceIPAddressString,16);
     Serial.println(deviceIPAddressString);
-    client.publish("fisherst-dev/deviceipaddress",deviceIPAddressString);
+    char tempName[50];
+    strcat(tempName, deviceName);
+    strcat(tempName, "/");
+    strcat (tempName,"deviceipaddress");
+    client.publish(tempName, deviceIPAddressString);
+    Serial.print ("Message sent to: ");
+    Serial.println (tempName);
+    
     // Temperature in Celsius
-    float voltage = (analogRead(tempPin)/4096.0)*3340.0; 
-    //float voltage = (analogRead(tempPin)/4096.0)*5030.0;
+    float voltage = (analogRead(tempPin)/4096.0)*3295.0; 
     temperature=(voltage/10.0)-273.3;  
     // Convert the value to a char array
     char tempString[8];
@@ -155,13 +162,12 @@ void loop() {
     Serial.print("Temperature: ");
     Serial.println(tempString);
     client.publish("fisherst-dev/temperature", tempString);
+    
     //Read battery voltage
-    float battVoltage = (analogRead(battVPin)/4096.0)*3340.0;
-    battVoltage = (battVoltage /1000)*2;
+    float rawVoltage = adc1_get_raw(ADC1_CHANNEL_3);
+    battVoltage = (rawVoltage / 1088)*2.0;
     char battVoltString[8];
     dtostrf(battVoltage, 1, 2, battVoltString);
-    Serial.print("Battery Voltage: ");
-    Serial.println(battVoltString);
     client.publish("fisherst-dev/batteryvolts", battVoltString);
     
 
@@ -185,6 +191,9 @@ void loop() {
     distance = distance - airgap;
     if (distance < 0) distance = 0;
     if (distance > maxHeight) distance=maxHeight;
+    char distanceString[8];
+    dtostrf(distance, 1, 2, distanceString);
+    client.publish("fisherst-dev/distance", distanceString);
     //Serial.println(String(distance));
     char volumeString[8];
     volume=((maxHeight-distance)/100) * radius * radius * PI * numberTanks*1000;
