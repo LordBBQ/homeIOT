@@ -6,14 +6,14 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include "DHT.h"
-//#include <Wire.h>
-//#include <Adafruit_BME280.h>
-//#include <Adafruit_Sensor.h>
+#include "time.h"
+
 #define DHTPIN 4
 #define DHTTYPE DHT11
 // Replace the next variables with your SSID/Password combination
 const char* ssid = "WhereWillYouSpendEternity";
 const char* password = "vxHtbppr6a+_4pv+Zcjjk5-m";
+const char* ntpServer = "192.168.1.1";
 
 // MQTT Broker IP address:
 const char* mqtt_server = "nodered.local";
@@ -25,6 +25,7 @@ const float radius=0.364;
 const float maxHeight=180;
 const float airgap=10.0; //space between sensor and max water level
 const float numberTanks=3.0;
+char localTimeString[40];
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -37,13 +38,29 @@ float humidity = 0;
 long duration;
 int distance;
 float volume;
+long  gmtOffset_sec = 36000;
+int   daylightOffset_sec = 0;
 
 DHT dht(DHTPIN, DHTTYPE);
+
+
+void getLocalTime()
+{
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  Serial.println(&timeinfo);
+  //timeinfo.toCharArray(deviceIPAddressString,16);
+
+}
+
 void setup() 
 {
   Serial.begin(115200);
   
-  esp_sleep_enable_timer_wakeup(600*1000000);
+  //esp_sleep_enable_timer_wakeup(600*1000000);
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
   pinMode(echoPin, INPUT); // Sets the echoPin as an Input/pinMode(tempPin, INPUT);
   dht.begin();
@@ -52,6 +69,8 @@ void setup()
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  getLocalTime();
 }
 
 void setup_wifi() {
@@ -94,7 +113,7 @@ void callback(char* topic, byte* message, unsigned int length) {
   if(String(topic) == "fisherst/sleep")
   {
     Serial.println("Sleepy time");
-    esp_deep_sleep_start();
+    //esp_deep_sleep_start();
   }
   
 }
@@ -107,8 +126,10 @@ void reconnect() {
     if (client.connect("ESP8266Client")) {
       Serial.println("connected");
       // Subscribe
-      //client.subscribe("fisherst/output");
-      //client.subscribe("fisherst/level");
+      client.subscribe("fisherst/maxheight");
+      client.subscribe("fisherst/airgap");
+      client.subscribe("fisherst/radius");
+      client.subscribe("fisherst/numbertanks");
       client.subscribe("fisherst/sleep");
     } else 
     {
@@ -129,6 +150,16 @@ void loop() {
   long now = millis();
   if (now - lastMsg > 5000) {
     lastMsg = now;
+
+    String tempIPAddress=WiFi.localIP().toString();
+    char deviceIPAddressString[20];
+    tempIPAddress.toCharArray(deviceIPAddressString,16);
+    Serial.println(deviceIPAddressString);
+    //char tempName[50];
+    //strcat(tempName, deviceName);
+    //strcat(tempName, "/");
+    //strcat (tempName,"deviceipaddress");
+    //client.publish(tempName, deviceIPAddressString);
     
     // Temperature in Celsius
     float voltage = (analogRead(tempPin)/4096.0)*3340.0; 
@@ -141,7 +172,7 @@ void loop() {
     Serial.println(voltage);
     Serial.print("Temperature: ");
     Serial.println(tempString);
-    client.publish("fisherst/temperature", tempString);
+    //client.publish("fisherst/temperature", tempString);
 
     // Read ultrasonic
     // Clears the trigPin
@@ -160,6 +191,10 @@ void loop() {
     float speedOfSound=331.4 +0.6*temperature;
     //distance= duration*0.034/2;
     distance = duration * speedOfSound / 20000;
+    char distanceString[8];
+    dtostrf(distance, 1, 2, distanceString);
+    Serial.print("Raw Distance: ");
+    Serial.println(distanceString);
     distance = distance - airgap;
     if (distance < 0) distance = 0;
     if (distance > maxHeight) distance=maxHeight;
@@ -167,7 +202,7 @@ void loop() {
     char volumeString[8];
     volume=((maxHeight-distance)/100) * radius * radius * PI * numberTanks*1000;
     dtostrf(volume, 1, 2, volumeString);
-    client.publish("fisherst/waterlevel", volumeString);
+    //client.publish("fisherst/waterlevel", volumeString);
     Serial.print("Volume: ");
     Serial.println(volumeString);
     
@@ -182,9 +217,19 @@ void loop() {
     Serial.println ("Temperature(DHT11): " + String(t) + " C");
     char humidityString[8];
     dtostrf(h, 1, 2, humidityString);
-    client.publish("fisherst/humidity", humidityString);
+    //client.publish("fisherst/humidity", humidityString);
     char ambientTemperatureString[8];
     dtostrf(t, 1, 2, ambientTemperatureString);
+
+    getLocalTime();
+
+    //publish data
+    client.publish("fisherst/localtime", localTimeString);
+    client.publish("fisherst/deviceipaddress", deviceIPAddressString);
     client.publish("fisherst/ambienttemp", ambientTemperatureString);
+    client.publish("fisherst/temperature", tempString);
+    client.publish("fisherst/humidity", humidityString);
+    client.publish("fisherst/waterlevel", volumeString);
+    
   }
 }
