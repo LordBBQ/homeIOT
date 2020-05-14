@@ -84,7 +84,7 @@ void onConnectionEstablished()
   // Subscribe to "mytopic/test" and display received message to Serial
   client.subscribe("fisherst/sleep", [](const String & payload) {
     Serial.println(payload);
-    if ((millis() >= 300000) || (esp_sleep_get_wakeup_cause()==3))
+    if ((millis() >= 300000) ) // || (esp_sleep_get_wakeup_cause()==3))
     {
       if (noSleep==false) 
       {
@@ -120,7 +120,7 @@ void loop()
   client.loop();
 
   long now = millis();
-  if (now - lastMsg > 600000)
+  if (now - lastMsg > 150000)
   {
     lastMsg = now;
     ////////////////////////////////////////////////////////////////////////////
