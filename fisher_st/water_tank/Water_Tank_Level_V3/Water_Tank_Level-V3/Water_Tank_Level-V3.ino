@@ -1,9 +1,4 @@
-/*
-  SimpleMQTTClient.ino
-  The purpose of this exemple is to illustrate a simple handling of MQTT and Wifi connection.
-  Once it connects successfully to a Wifi network and a MQTT broker, it subscribe to a topic and send a message to it.
-  It will also send a message delayed 5 seconds later.
-*/
+
 
 #include "EspMQTTClient.h"
 #include "DHT.h"
@@ -11,6 +6,12 @@
 
 #define DHTPIN 4
 #define DHTTYPE DHT11
+
+//======================================================================
+//
+const char* versionString="3.2.1";
+//
+//======================================================================
 const char* deviceName = "fisherst";
 const char* mqtt_server = "nodered.local";
 
@@ -31,7 +32,7 @@ const int battVPin=39;
 //Settings for water tank
 const float radius=0.364;
 const float maxHeight=180;
-const float airgap=8.0; //space between sensor and max water level
+const float airgap=53.0; //space between sensor and max water level
 const float numberTanks=3.0;
 
 int value = 0;
@@ -75,6 +76,7 @@ void setup()
   analogReadResolution(12);
   adc1_config_width(ADC_WIDTH_12Bit);
   adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_11db);
+  adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
 }
 
 // This function is called once everything is connected (Wifi and MQTT)
@@ -120,13 +122,18 @@ void loop()
   client.loop();
 
   long now = millis();
-  if (now - lastMsg > 150000)
+  if (now - lastMsg > 60000)
   {
     lastMsg = now;
     ////////////////////////////////////////////////////////////////////////////
     // Publish IP Address
     String tempIPAddress=WiFi.localIP().toString();
     client.publish("fisherst/deviceipaddress", tempIPAddress);
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Publish Version
+    //
+    client.publish("fisherst/softwareVersion", versionString);
     
     ////////////////////////////////////////////////////////////////////////////
     //Read battery voltage
@@ -135,9 +142,11 @@ void loop()
     client.publish("fisherst/batteryvoltage", String(battVoltage));
     
     ////////////////////////////////////////////////////////////////////////////
-    // Internal tanke temperature in Celsius
-    float voltage = (analogRead(tempPin)/4096.0)*3295.0; 
-    temperature=(voltage/10.0)-273.3;  
+    // Internal tank temperature in Celsius
+    //float voltage = (analogRead(tempPin)/4096.0)*3295.0; 
+    rawVoltage = adc1_get_raw(ADC1_CHANNEL_7);
+    float temperature = ((rawVoltage / 4095) * 3.3 * 100) - 273.3;
+    //temperature=(voltage/10.0)-273.3;  
     client.publish("fisherst/tamktemperature", String(temperature));
 
     /////////////////////////////////////////////////////////////////////////////
@@ -154,7 +163,7 @@ void loop()
     // Calculating the distance
     float speedOfSound=331.4 +0.6*temperature;
     distance = duration * speedOfSound / 20000;
-    ///////client.publish("fisherst/rawdistance", String(distance));
+    client.publish("fisherst/rawdistance", String(distance));
     distance = distance - airgap;
     if (distance < 0) distance = 0;
     if (distance > maxHeight) distance=maxHeight;
@@ -165,9 +174,15 @@ void loop()
     //Read ambient temperature and humidity
     float t = dht.readTemperature();
     float h = dht.readHumidity();
-    if (isnan(h) || isnan(t))
+    if (isnan(h))
     {
-      Serial.println("Failed to read from DHT sensor");
+      Serial.println("Failed to read humidity from DHT sensor");
+      h=0;
+    }
+    if (isnan(t))
+    {
+      Serial.println("Failed to read temperature from DHT sensor");
+      t=0;
     }
     client.publish("fisherst/humidity", String(h));
     client.publish("fisherst/ambienttemp", String(t));
